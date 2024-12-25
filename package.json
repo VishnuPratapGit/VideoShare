@@ -1,0 +1,16 @@
+{
+  "name": "youtube-mern",
+  "version": "1.0.0",
+  "description": "FullStack App using MERN Stack.",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "nodemon src/server.js"
+  },
+  "author": "vps",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.21.2",
+    "prettier": "^3.4.2"
+  }
+}
