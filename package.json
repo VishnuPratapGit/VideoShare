@@ -5,11 +5,13 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "nodemon src/server.js"
+    "dev": "nodemon src/server.js"
   },
   "author": "vps",
   "license": "ISC",
   "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "mongoose": "^8.9.2",
