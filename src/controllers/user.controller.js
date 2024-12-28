@@ -7,6 +7,7 @@ import { ApiResponse } from "../utils/apiResponse.js";
 const registerUser = asyncHandler(async (req, res) => {
     const { username, email, password, fullName } = req.body;
 
+    // check if any field is empty
     if (
         [username, email, password, fullName].some(
             (field) => field?.trim() === ""
@@ -15,19 +16,27 @@ const registerUser = asyncHandler(async (req, res) => {
         throw new ApiError(400, "All fields are required");
     }
 
+    // check if user already register or not
     const checkDuplicate = await User.findOne({
         $or: [{ username }, { email }],
     });
     if (checkDuplicate) throw new ApiError(409, "User already exists");
 
-    const avatarLocalPath = req.files?.avatar[0]?.path;
-    const coverImageLocalPath = req.files?.coverImage[0]?.path;
+    // Handle avatar upload
+    const avatarLocalPath = req.files?.avatar?.[0]?.path;
     if (!avatarLocalPath) throw new ApiError(400, "Avatar is required");
 
     const avatar = await uploadOnCloudinary(avatarLocalPath);
-    const coverImage = await uploadOnCloudinary(coverImageLocalPath);
-    if (!avatar) throw new ApiError(400, "Avatar not upload!");
+    if (!avatar?.url) throw new ApiError(400, "Avatar upload failed!");
 
+    // Handle coverImage upload
+    let coverImage = null;
+    if (req.files?.coverImage?.[0]?.path) {
+        const coverImageLocalPath = req.files.coverImage[0].path;
+        coverImage = await uploadOnCloudinary(coverImageLocalPath);
+    }
+
+    // register user
     const user = await User.create({
         username: username.toLowerCase(),
         fullName,
@@ -37,10 +46,14 @@ const registerUser = asyncHandler(async (req, res) => {
         coverImage: coverImage?.url || "",
     });
 
+    // create user responce with removing critical fields.
     const userResponce = await User.findById(user._id).select(
         "-password -refreshToken"
     );
-    if (!userResponce) throw new ApiError(400, "Avatar not upload!");
+
+    if (!userResponce) {
+        throw new ApiError(400, "User registration unsuccessful!");
+    }
 
     return res
         .status(201)
