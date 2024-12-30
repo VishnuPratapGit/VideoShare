@@ -179,4 +179,129 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
             })
         );
 });
-export { registerUser, loginUser, logoutUser, refreshAccessToken };
+
+// auth middleware required
+const changeCurrentPassword = asyncHandler(async (req, res) => {
+    const { oldPassword, newPassword } = req.body;
+
+    if (!oldPassword && !newPassword)
+        throw new ApiError(401, "Fields are mendatory");
+
+    const user = req.user;
+
+    const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
+
+    if (!isPasswordCorrect)
+        throw new ApiError(401, "Incorrect current password!");
+
+    user.password = newPassword;
+    await user.save({ validateBeforeSave: false });
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, "Password Changed Successfully"));
+});
+
+// auth middleware required
+const getCurrentUser = asyncHandler((req, res) => {
+    return res
+        .status(200)
+        .json(new ApiResponse(200, "User fetched successfully", req.user));
+});
+
+// auth middleware required
+const updateUserDetails = asyncHandler(async (req, res) => {
+    const { newfullName, newEmail, oldPassword, newPassword } = req.body;
+
+    if (!oldPassword) {
+        throw new ApiError(401, "Password is required to update details");
+    }
+
+    const user = await User.findById(req.user?._id);
+
+    if (!user) {
+        throw new ApiError(500, "Database error occurred!");
+    }
+
+    const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
+
+    if (!isPasswordCorrect) {
+        throw new ApiError(401, "Incorrect Password!");
+    }
+
+    if (newfullName) user.fullName = newfullName;
+    if (newEmail) user.email = newEmail;
+    if (newPassword) user.password = newPassword;
+
+    await user.save();
+
+    const updatedUser = await User.findById(user._id).select(
+        "-password -refreshToken"
+    );
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, "Update Successfully", updatedUser));
+});
+
+// both middleware required
+const updateAvatar = asyncHandler(async (req, res) => {
+    const localAvatarPath = req.file?.avatar;
+
+    if (!localAvatarPath) {
+        throw new ApiError(400, "Avatar is missing!");
+    }
+
+    const avatar = await uploadOnCloudinary(localAvatarPath);
+
+    if (!avatar.url) {
+        throw new ApiError(400, "Error in uploading avatar!");
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+        req.user?._id,
+        { $set: { avatar: avatar.url } },
+        { new: true }
+    ).select("-password -refreshToken");
+
+    res.status(200).json(
+        new ApiResponse(200, "Avatar update successfull", updatedUser)
+    );
+});
+
+// both middleware required
+const updateCoverImage = asyncHandler(async (req, res) => {
+    const localCoverImagePath = req.file?.coverImage;
+
+    if (!localCoverImagePath) {
+        throw new ApiError(400, "CoverImage file is missing!");
+    }
+
+    const coverImage = await uploadOnCloudinary(localCoverImagePath);
+
+    if (!coverImage.url) {
+        throw new ApiError(400, "Error in uploading coverImage!");
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+        req.user?._id,
+        { $set: { coverImage: coverImage.url } },
+        { new: true }
+    ).select("-password -refreshToken");
+
+    res.status(200).json(
+        new ApiResponse(200, "CoverImage successfully updated", updatedUser)
+    );
+});
+
+export {
+    registerUser,
+    loginUser,
+    logoutUser,
+    refreshAccessToken,
+    changeCurrentPassword,
+    getCurrentUser,
+    updateUserDetails,
+    updateAvatar,
+    updateCoverImage,
+};
