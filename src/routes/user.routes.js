@@ -37,6 +37,7 @@ userRouter
 userRouter
     .route("/update-coverimage")
     .patch(verifyJWT, uploadMulter.single("coverImage"), updateCoverImage);
+
 userRouter.route("/channel/:username").get(verifyJWT, getUserChannelProfile);
 userRouter.route("/history").get(verifyJWT, getHistory);
 

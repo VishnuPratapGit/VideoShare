@@ -3,6 +3,7 @@ import { ApiError } from "../utils/apiError.js";
 import { User } from "../models/user.model.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/apiResponse.js";
+import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 
 const generateTokens = async (user) => {
@@ -141,7 +142,7 @@ const logoutUser = asyncHandler(async (req, res) => {
 
 const refreshAccessToken = asyncHandler(async (req, res) => {
     const incomingRefreshToken =
-        req.cookie?.refreshToken || req.body.refreshToken;
+        req.cookies?.refreshToken || req.body.refreshToken;
 
     if (!incomingRefreshToken) {
         throw new ApiError(401, "refresh token not exist || login again");
@@ -152,7 +153,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
         process.env.REFRESH_TOKEN_SECRET
     );
 
-    const user = await User.findById(decodedToken?.id);
+    const user = await User.findById(decodedToken?._id);
 
     if (!user) {
         throw new ApiError(404, "User not found. Please log in again.");
@@ -162,7 +163,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
         throw new ApiError(401, "Invalid refresh token.");
     }
 
-    const { accessToken, newRefreshToken } = await generateTokens(user);
+    const { accessToken, refreshToken } = await generateTokens(user);
 
     const options = {
         httpOnly: true,
@@ -171,23 +172,22 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 
     res.status(200)
         .cookie("accessToken", accessToken, options)
-        .cookie("refreshToken", newRefreshToken, options)
+        .cookie("refreshToken", refreshToken, options)
         .json(
             new ApiResponse(200, "Access Token Refreshed", {
                 accessToken,
-                refreshToken: newRefreshToken,
+                refreshToken,
             })
         );
 });
 
-// auth middleware required
 const changeCurrentPassword = asyncHandler(async (req, res) => {
     const { oldPassword, newPassword } = req.body;
 
     if (!oldPassword && !newPassword)
         throw new ApiError(401, "Fields are mendatory");
 
-    const user = req.user;
+    const user = await User.findById(req.user?._id).select("password");
 
     const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
 
@@ -202,14 +202,12 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, "Password Changed Successfully"));
 });
 
-// auth middleware required
 const getCurrentUser = asyncHandler((req, res) => {
     return res
         .status(200)
         .json(new ApiResponse(200, "User fetched successfully", req.user));
 });
 
-// auth middleware required
 const updateUserDetails = asyncHandler(async (req, res) => {
     const { newfullName, newEmail, oldPassword, newPassword } = req.body;
 
@@ -244,9 +242,8 @@ const updateUserDetails = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, "Update Successfully", updatedUser));
 });
 
-// both middleware required
 const updateAvatar = asyncHandler(async (req, res) => {
-    const localAvatarPath = req.file?.avatar;
+    const localAvatarPath = req.file?.path;
 
     if (!localAvatarPath) {
         throw new ApiError(400, "Avatar is missing!");
@@ -269,9 +266,8 @@ const updateAvatar = asyncHandler(async (req, res) => {
     );
 });
 
-// both middleware required
 const updateCoverImage = asyncHandler(async (req, res) => {
-    const localCoverImagePath = req.file?.coverImage;
+    const localCoverImagePath = req.file?.path;
 
     if (!localCoverImagePath) {
         throw new ApiError(400, "CoverImage file is missing!");
@@ -294,11 +290,10 @@ const updateCoverImage = asyncHandler(async (req, res) => {
     );
 });
 
-// auth middleware required in aggrgate $cond:
 const getUserChannelProfile = asyncHandler(async (req, res) => {
     const { username } = req.params;
 
-    username = username?.trim();
+    console.log(username);
 
     if (!username) {
         throw new ApiError(400, "Username not found!");
@@ -368,7 +363,6 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
     );
 });
 
-// auth middleware required in match
 const getHistory = asyncHandler(async (req, res) => {
     const user = await User.aggregate([
         {
@@ -389,12 +383,14 @@ const getHistory = asyncHandler(async (req, res) => {
                             localField: "owner",
                             foreignField: "_id",
                             as: "owner",
-                            pipeline: {
-                                $project: {
-                                    username: 1,
-                                    avatar: 1,
+                            pipeline: [
+                                {
+                                    $project: {
+                                        username: 1,
+                                        avatar: 1,
+                                    },
                                 },
-                            },
+                            ],
                         },
                     },
                     {
