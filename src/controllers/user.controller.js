@@ -294,6 +294,130 @@ const updateCoverImage = asyncHandler(async (req, res) => {
     );
 });
 
+// auth middleware required in aggrgate $cond:
+const getUserChannelProfile = asyncHandler(async (req, res) => {
+    const { username } = req.params;
+
+    username = username?.trim();
+
+    if (!username) {
+        throw new ApiError(400, "Username not found!");
+    }
+
+    const channelProfile = await User.aggregate([
+        {
+            $match: {
+                username: username?.toLowerCase(),
+            },
+        },
+        {
+            $lookup: {
+                from: "subscriptions",
+                localField: "_id",
+                foreignField: "channel",
+                as: "subscribers",
+            },
+        },
+        {
+            $lookup: {
+                from: "subscription",
+                localField: "_id",
+                foreignField: "subscriber",
+                as: "subscribedTo",
+            },
+        },
+        {
+            $addFields: {
+                subscribersCount: { $size: "$subscribers" },
+                subscribedToCount: { $size: "$subscribedTo" },
+                isSubscribed: {
+                    $cond: {
+                        if: { $in: [req.user?._id, "$subscribers.subscriber"] },
+                        then: true,
+                        else: false,
+                    },
+                },
+            },
+        },
+        {
+            $project: {
+                username: 1,
+                fullName: 1,
+                email: 1,
+                subscribersCount: 1,
+                subscribedToCount: 1,
+                isSubscribed: 1,
+                avatar: 1,
+                coverImage: 1,
+                createdAt: 1,
+                subscribers: 1,
+            },
+        },
+    ]);
+
+    if (!channelProfile?.length) {
+        throw new ApiError(404, "Channel does not exist!");
+    }
+
+    res.status(200).json(
+        new ApiResponse(
+            200,
+            "Fething User channel successfully",
+            channelProfile[0]
+        )
+    );
+});
+
+// auth middleware required in match
+const getHistory = asyncHandler(async (req, res) => {
+    const user = await User.aggregate([
+        {
+            $match: {
+                _id: new mongoose.Types.ObjectId(req.user?._id),
+            },
+        },
+        {
+            $lookup: {
+                from: "videos",
+                localField: "watchHistory",
+                foreignField: "_id",
+                as: "watchHistory",
+                pipeline: [
+                    {
+                        $lookup: {
+                            from: "users",
+                            localField: "owner",
+                            foreignField: "_id",
+                            as: "owner",
+                            pipeline: {
+                                $project: {
+                                    username: 1,
+                                    avatar: 1,
+                                },
+                            },
+                        },
+                    },
+                    {
+                        $addFields: {
+                            owner: {
+                                $first: "$owner",
+                            },
+                        },
+                    },
+                ],
+            },
+        },
+    ]);
+
+    res.status(200).json(
+        new ApiResponse(
+            200,
+            "History fetched Successfully",
+            user[0].watchHistory
+        )
+    );
+});
+
 export {
     registerUser,
     loginUser,
@@ -304,4 +428,6 @@ export {
     updateUserDetails,
     updateAvatar,
     updateCoverImage,
+    getUserChannelProfile,
+    getHistory,
 };
